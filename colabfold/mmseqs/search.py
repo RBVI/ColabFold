@@ -68,6 +68,7 @@ def mmseqs_search_monomer(
     gpu: int = 0,
     gpu_server: int = 0,
     unpack: bool = True,
+    pre_pairing: bool = False,
 ):
     """Run mmseqs with a local colabfold database set
 
@@ -142,6 +143,19 @@ def mmseqs_search_monomer(
         run_mmseqs(mmseqs, ["rmdb", base.joinpath("res_exp_realign_filter")])
         run_mmseqs(mmseqs, ["rmdb", base.joinpath("res_exp_realign")])
         run_mmseqs(mmseqs, ["rmdb", base.joinpath("res_exp")])
+
+        if pre_pairing:
+            expand_param_pairing = ["--expansion-mode", "0", "-e",str(expand_eval), "--expand-filter-clusters", "0", "--max-seq-id", "0.95",]
+            max_accept_pairing = 1000000
+            align_eval_pairing = 0.001
+            run_mmseqs(mmseqs, ["expandaln", base.joinpath("qdb"), dbbase.joinpath(f"{uniref_db}{dbSuffix1}"), base.joinpath("res"), dbbase.joinpath(f"{uniref_db}{dbSuffix2}"), base.joinpath("res_exp"), "--db-load-mode", str(db_load_mode), "--threads", str(threads)] + expand_param_pairing)
+            run_mmseqs(mmseqs, ["align", base.joinpath("prof_res"), dbbase.joinpath(f"{uniref_db}{dbSuffix1}"), base.joinpath("res_exp"), base.joinpath("res_exp_realign"), "--db-load-mode", str(db_load_mode), "-e", str(align_eval_pairing), "--max-accept", str(max_accept_pairing), "-a", "--threads", str(threads)])
+            run_mmseqs(mmseqs, ["result2msa", base.joinpath("qdb"), dbbase.joinpath(f"{uniref_db}{dbSuffix1}"), base.joinpath("res_exp_realign"), base.joinpath("pre_pairing.a3m"), "--db-load-mode", str(db_load_mode), "--msa-format-mode", "5", "--threads", str(threads),],) 
+            run_mmseqs(mmseqs, ["unpackdb", base.joinpath("pre_pairing.a3m"), base.joinpath("."), "--unpack-name-mode", "0", "--unpack-suffix", '.pre_paired.a3m',],)
+            run_mmseqs(mmseqs, ["rmdb", base.joinpath("pre_pairing.a3m")])
+            run_mmseqs(mmseqs, ["rmdb", base.joinpath("res_exp_realign")])
+            run_mmseqs(mmseqs, ["rmdb", base.joinpath("res_exp")])
+
         run_mmseqs(mmseqs, ["rmdb", base.joinpath("res")])
     else:
         logger.info(f"Skipping {uniref_db} search because uniref.a3m already exists")
@@ -396,6 +410,9 @@ def main():
         "--merge-a3m", type=int, default=1, choices=[0, 1], help="Merge unpacked a3m files into a single a3m file."
     )
     parser.add_argument(
+        "--pre-pairing", action="store_true", help="Output unpaired MSA suitable for pairing."
+    )
+    parser.add_argument(
         "--threads", type=int, default=64, help="Number of threads to use."
     )
     parser.add_argument(
@@ -490,6 +507,7 @@ def main():
         gpu=args.gpu,
         gpu_server=args.gpu_server,
         unpack=args.unpack,
+        pre_pairing=args.pre_pairing,
     )
     if is_complex is True:
         mmseqs_search_pair(

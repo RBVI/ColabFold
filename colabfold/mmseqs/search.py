@@ -69,6 +69,7 @@ def mmseqs_search_monomer(
     gpu_server: int = 0,
     unpack: bool = True,
     pre_pairing: bool = False,
+    split_memory_limit: str = None,
 ):
     """Run mmseqs with a local colabfold database set
 
@@ -123,7 +124,9 @@ def mmseqs_search_monomer(
             search_param += ["--k-score", "'seq:96,prof:80'"]
     if gpu_server:
         search_param += ["--gpu-server", str(gpu_server)]
-
+    if split_memory_limit:
+        search_param += ["--split-memory-limit", split_memory_limit]
+        
     filter_param = ["--filter-msa", str(filter), "--filter-min-enable", "1000", "--diff", str(diff), "--qid", "0.0,0.2,0.4,0.6,0.8,1.0", "--qsc", "0", "--max-seq-id", "0.95",]
     expand_param = ["--expansion-mode", "0", "-e", str(expand_eval), "--expand-filter-clusters", str(filter), "--max-seq-id", "0.95",]
 
@@ -237,6 +240,7 @@ def mmseqs_search_pair(
     db_load_mode: int = 2,
     pairing_strategy: int = 0,
     unpack: bool = True,
+    split_memory_limit: str = None,
 ):
     if not dbbase.joinpath(f"{uniref_db}.dbtype").is_file():
         raise FileNotFoundError(f"Database {uniref_db} does not exist")
@@ -275,6 +279,9 @@ def mmseqs_search_pair(
             search_param += ["--k-score", "'seq:96,prof:80'"]
     if gpu_server:
         search_param += ["--gpu-server", str(gpu_server)]
+    if split_memory_limit:
+        search_param += ["--split-memory-limit", split_memory_limit]
+
     expand_param = ["--expansion-mode", "0", "-e", "inf", "--expand-filter-clusters", "0", "--max-seq-id", "0.95",]
     run_mmseqs(mmseqs, ["search", base.joinpath("qdb"), dbbase.joinpath(db), base.joinpath("res"), base.joinpath("tmp"), "--threads", str(threads),] + search_param,)
     run_mmseqs(mmseqs, ["mvdb", base.joinpath("tmp/latest/profile_1"), base.joinpath("prof_res")])
@@ -413,6 +420,9 @@ def main():
         "--pre-pairing", action="store_true", help="Output unpaired MSA suitable for pairing."
     )
     parser.add_argument(
+        "--split-memory-limit", type=str, default=None, help="Pass this option to mmseqs to limit memory use.  Example 32G.  Default is to use mmseqs default which is all available memory.  Sometimes using all available memory crashes, and that is where this option is useful."
+    )
+    parser.add_argument(
         "--threads", type=int, default=64, help="Number of threads to use."
     )
     parser.add_argument(
@@ -508,6 +518,7 @@ def main():
         gpu_server=args.gpu_server,
         unpack=args.unpack,
         pre_pairing=args.pre_pairing,
+        split_memory_limit=args.split_memory_limit,
     )
     if is_complex is True:
         mmseqs_search_pair(
@@ -524,6 +535,7 @@ def main():
             pairing_strategy=args.pairing_strategy,
             pair_env=False,
             unpack=args.unpack,
+            split_memory_limit=args.split_memory_limit,
         )
         if args.use_env_pairing:
             mmseqs_search_pair(
@@ -541,6 +553,7 @@ def main():
                 pairing_strategy=args.pairing_strategy,
                 pair_env=True,
                 unpack=args.unpack,
+                split_memory_limit=args.split_memory_limit,
             )
 
         if args.merge_a3m or args.af3_json:
@@ -619,6 +632,11 @@ def main():
                             args.base.joinpath(f"{id}.paired.a3m"),
                             args.base.joinpath(f"{safe_filename(raw_jobname)}_{id}.paired.a3m"),
                         )
+                        if args.pre_pairing:
+                            os.rename(
+                                args.base.joinpath(f"{id}.pre_paired.a3m"),
+                                args.base.joinpath(f"{safe_filename(raw_jobname)}_{id}.pre_paired.a3m"),
+                            )
                         if args.use_env_pairing:
                             os.rename(
                                 args.base.joinpath(f"{id}.env.paired.a3m"),
